@@ -54,16 +54,18 @@ curl -X POST "$(terraform output -raw auth_endpoint)" \
   -d '{"cpf": "12345678900"}'
 ```
 
-## ⚠️ Dependência pendente na aplicação principal
+## ✅ Coluna `Ativo` — resolvido
 
-Esta Lambda espera duas colunas na tabela `Clientes`:
-- `Documento` (já existe)
-- `Ativo` (bit/boolean — **ainda precisa ser adicionada** via migration no
-  repositório `OficinaMecanicaWagyu`, junto com a lógica de negócio de
-  ativar/inativar cliente)
+Esta Lambda consulta duas colunas na tabela `Clientes`:
+- `Documento` (já existia desde a Fase 1)
+- `Ativo` (bit/boolean — adicionada via migration `AddClienteAtivo` no
+  repositório `OficinaMecanicaWagyu` especificamente para suportar esta
+  Lambda, junto com os endpoints `POST /api/Clientes/{id}/inativar` e
+  `/reativar`)
 
-Até essa coluna existir, ajuste a query em `src/index.js` ou trate a ausência
-da coluna como "sempre ativo" no código da aplicação.
+Testado e confirmado em produção: um cliente cadastrado como ativo é
+autenticado normalmente; um cliente inativado retorna `403 Forbidden`,
+mesmo com CPF válido e cadastrado.
 
 ## Integração com a aplicação principal
 
@@ -71,3 +73,55 @@ O `Jwt__Secret` configurado no Secret do Kubernetes (repositório
 `oficina-wagyu-infra-k8s`) deve ser **exatamente o mesmo** valor de
 `jwt_secret` usado aqui, para que o token emitido pela Lambda seja aceito
 pela aplicação.
+
+
+## ✅ Status: testado e validado em produção
+
+- **Endpoint real:** `https://4ty9529fpe.execute-api.us-east-1.amazonaws.com/auth/cpf`
+- Testado com sucesso: CPF válido de cliente ativo → token JWT emitido e
+  **aceito pela aplicação principal** (rota protegida `GET /api/OrdensServico`
+  retornou 200 OK usando o token da Lambda).
+- Isso confirma o fluxo completo descrito no
+  [Diagrama de Sequência](https://github.com/Rogeraugusto23/OficinaMecanicaWagyu/blob/main/docs/architecture/diagrama-sequencia.md)
+  funcionando de ponta a ponta: Cliente → API Gateway → Lambda → RDS → JWT → API protegida.
+
+⚠️ **Nota sobre reinicialização do ambiente:** como este ambiente roda sobre
+o AWS Academy Learner Lab, o endpoint acima pode parar de responder se os
+recursos forem destruídos/recriados entre sessões (`terraform destroy` /
+`apply`). Nesse caso, reaplique este repositório e o de banco de dados, e
+atualize a documentação com o novo endpoint gerado.
+
+
+## ✅ Status: testado e validado em produção
+
+- **Cluster ativo, testado com sucesso:**
+  - API rodando e acessível: `http://54.236.48.235:30080/swagger`
+  - Healthcheck: `http://54.236.48.235:30080/health`
+  - 2 pods em `Running`, conectados ao RDS gerenciado
+- **Deploy automático testado**: pipeline de CI/CD do repositório da
+  aplicação (`OficinaMecanicaWagyu`) conecta via SSH nesta EC2 e atualiza
+  os pods automaticamente a cada push — sem runner self-hosted.
+
+⚠️ **Nota sobre o IP público:** o IP acima pode mudar se a instância EC2 for
+reiniciada (não é um Elastic IP fixo). Se isso acontecer:
+1. Confirme o IP novo: `aws ec2 describe-instances --filters "Name=tag:Name,Values=oficina-wagyu-k3s-node" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text`
+2. Atualize o secret `EC2_HOST` no repositório `OficinaMecanicaWagyu`
+3. Se o `kubectl` local parar de responder, rebaixe o kubeconfig com o IP novo (ver comandos no início deste README)
+
+
+
+## ✅ Status: testado e validado em produção
+
+- **Endpoint real:** `https://4ty9529fpe.execute-api.us-east-1.amazonaws.com/auth/cpf`
+- Testado com sucesso: CPF válido de cliente ativo → token JWT emitido e
+  **aceito pela aplicação principal** (rota protegida `GET /api/OrdensServico`
+  retornou 200 OK usando o token da Lambda).
+- Isso confirma o fluxo completo descrito no
+  [Diagrama de Sequência](https://github.com/Rogeraugusto23/OficinaMecanicaWagyu/blob/main/docs/architecture/diagrama-sequencia.md)
+  funcionando de ponta a ponta: Cliente → API Gateway → Lambda → RDS → JWT → API protegida.
+
+⚠️ **Nota sobre reinicialização do ambiente:** como este ambiente roda sobre
+o AWS Academy Learner Lab, o endpoint acima pode parar de responder se os
+recursos forem destruídos/recriados entre sessões (`terraform destroy` /
+`apply`). Nesse caso, reaplique este repositório e o de banco de dados, e
+atualize a documentação com o novo endpoint gerado.
