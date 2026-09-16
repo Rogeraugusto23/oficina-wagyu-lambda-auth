@@ -1,5 +1,7 @@
 # 1. Prepara uma pasta de build limpa com node_modules de produção,
 #    sem incluir .git, .terraform, testes, etc. no pacote da Lambda.
+#    Usa "node build.js" (script portátil) em vez de comandos de shell
+#    Unix (rm/mkdir/cp), que não existem no cmd.exe do Windows.
 resource "null_resource" "npm_install" {
   triggers = {
     package_json_hash = filesha256("${path.module}/package.json")
@@ -7,13 +9,8 @@ resource "null_resource" "npm_install" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
-      rm -rf ${path.module}/build
-      mkdir -p ${path.module}/build
-      cp -r ${path.module}/src ${path.module}/build/
-      cp ${path.module}/package.json ${path.module}/build/
-      cd ${path.module}/build && npm install --production
-    EOT
+    working_dir = path.module
+    command     = "node build.js && cd build && npm install --production"
   }
 }
 
